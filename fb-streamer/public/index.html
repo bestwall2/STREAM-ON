@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FB Live Streamer</title>
+  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='16' fill='%231877f2'/><text x='16' y='22' text-anchor='middle' font-size='18' fill='white' font-family='sans-serif'>▶</text></svg>">
+</head>
+<body>
+
+<!-- ════════════════════════════ HEADER ════════════════════════════════════ -->
+<header class="site-header">
+  <div class="header-left">
+    <span class="logo-icon">▶</span>
+    <span class="logo-text">FB Live Streamer</span>
+    <span class="ws-badge" id="wsBadge" title="WebSocket status">●</span>
+  </div>
+  <div class="header-center" id="headerStats">
+    <span class="hstat"><span class="hstat-val" id="hTotalStreams">0</span> streams</span>
+    <span class="hstat-sep">|</span>
+    <span class="hstat"><span class="hstat-val hstat-live" id="hLiveStreams">0</span> live</span>
+    <span class="hstat-sep">|</span>
+    <span class="hstat"><span class="hstat-val hstat-warn" id="hFallback">0</span> fallback</span>
+  </div>
+  <div class="header-right">
+    <button class="btn btn-primary" id="btnAddStream">+ Add Stream</button>
+  </div>
+</header>
+
+<!-- ═══════════════════════════ MAIN GRID ═══════════════════════════════════ -->
+<main class="stream-grid" id="streamGrid">
+  <!-- Stream cards are injected here by app.js -->
+  <div class="empty-state" id="emptyState">
+    <div class="empty-icon">📡</div>
+    <p class="empty-title">No streams configured</p>
+    <p class="empty-sub">Click <strong>+ Add Stream</strong> to get started.</p>
+  </div>
+</main>
+
+<!-- ═══════════════════════════ STREAM CARD TEMPLATE ════════════════════════ -->
+<template id="tmplStreamCard">
+  <article class="stream-card" data-id="">
+
+    <!-- Card header: name + status + actions -->
+    <div class="card-header">
+      <div class="card-title-row">
+        <span class="status-dot"></span>
+        <h2 class="card-name"></h2>
+        <span class="state-badge"></span>
+        <span class="fallback-chip hidden">SLATE</span>
+      </div>
+      <div class="card-actions">
+        <button class="btn btn-sm btn-start"   title="Start"  >▶ Start</button>
+        <button class="btn btn-sm btn-stop"    title="Stop"   >■ Stop</button>
+        <button class="btn btn-sm btn-restart" title="Restart">↻ Restart</button>
+        <button class="btn btn-sm btn-icon btn-edit"   title="Edit stream">✎</button>
+        <button class="btn btn-sm btn-icon btn-danger btn-delete" title="Delete stream">✕</button>
+      </div>
+    </div>
+
+    <!-- Live stats row -->
+    <div class="stats-row">
+      <div class="stat-cell">
+        <span class="stat-label">Uptime</span>
+        <span class="stat-val stat-uptime">—</span>
+      </div>
+      <div class="stat-cell">
+        <span class="stat-label">Reconnects</span>
+        <span class="stat-val stat-reconnects">0</span>
+      </div>
+      <div class="stat-cell">
+        <span class="stat-label">FPS</span>
+        <span class="stat-val stat-fps">—</span>
+      </div>
+      <div class="stat-cell">
+        <span class="stat-label">Bitrate</span>
+        <span class="stat-val stat-bitrate">—</span>
+      </div>
+      <div class="stat-cell">
+        <span class="stat-label">Frames</span>
+        <span class="stat-val stat-frames">—</span>
+      </div>
+      <div class="stat-cell">
+        <span class="stat-label">Dropped</span>
+        <span class="stat-val stat-dropped">0</span>
+      </div>
+      <div class="stat-cell">
+        <span class="stat-label">Speed</span>
+        <span class="stat-val stat-speed">—</span>
+      </div>
+    </div>
+
+    <!-- Source + preset info -->
+    <div class="card-meta">
+      <span class="meta-source" title=""></span>
+      <span class="meta-preset"></span>
+    </div>
+
+    <!-- Log panel (hidden until toggled) -->
+    <div class="log-panel hidden">
+      <div class="log-toolbar">
+        <span class="log-title">FFmpeg Log</span>
+        <div class="log-tools">
+          <label class="autoscroll-label">
+            <input type="checkbox" class="cb-autoscroll" checked />
+            Auto-scroll
+          </label>
+          <button class="btn btn-xs btn-clear-logs">Clear</button>
+        </div>
+      </div>
+      <div class="log-body"></div>
+    </div>
+
+    <!-- Log toggle button -->
+    <button class="btn btn-xs btn-logs-toggle">Logs ▼</button>
+  </article>
+</template>
+
+<!-- ═══════════════════════════ MODAL (Add / Edit) ══════════════════════════ -->
+<div class="modal-backdrop hidden" id="modalBackdrop">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal-header">
+      <h3 id="modalTitle">Add Stream</h3>
+      <button class="btn btn-icon modal-close" id="modalClose" aria-label="Close">✕</button>
+    </div>
+
+    <form class="modal-body" id="streamForm" novalidate autocomplete="off">
+      <input type="hidden" id="fStreamId" />
+
+      <div class="field-row">
+        <div class="field">
+          <label for="fName">Stream name <span class="req">*</span></label>
+          <input type="text" id="fName" placeholder="My 24/7 Stream" required />
+        </div>
+      </div>
+
+      <div class="field-row">
+        <div class="field">
+          <label for="fSourceUrl">Source URL <span class="req">*</span>
+            <span class="hint">m3u8, rtmp://, udp://, http://, /path/to/file.mp4 …</span>
+          </label>
+          <input type="text" id="fSourceUrl" placeholder="http://example.com/live/stream.m3u8" required />
+        </div>
+      </div>
+
+      <div class="field-row">
+        <div class="field">
+          <label for="fFbKey">Facebook Stream Key <span class="req">*</span>
+            <span class="hint">Found in Creator Studio › Go Live › Stream Key</span>
+          </label>
+          <div class="input-group">
+            <input type="password" id="fFbKey" placeholder="••••••••••••••••••••" required />
+            <button type="button" class="btn btn-icon" id="btnToggleKey" title="Show / hide key">👁</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="field-row">
+        <div class="field">
+          <label for="fPreset">Quality Preset</label>
+          <select id="fPreset">
+            <!-- Populated by JS -->
+          </select>
+        </div>
+      </div>
+
+      <!-- Custom settings (shown only when preset = 'custom') -->
+      <details class="custom-settings" id="customSettingsBlock">
+        <summary>Custom Video / Audio Settings</summary>
+        <div class="custom-grid">
+          <div class="field">
+            <label for="fWidth">Width (px)</label>
+            <input type="number" id="fWidth" min="240" max="3840" placeholder="1280" />
+          </div>
+          <div class="field">
+            <label for="fHeight">Height (px)</label>
+            <input type="number" id="fHeight" min="144" max="2160" placeholder="720" />
+          </div>
+          <div class="field">
+            <label for="fFps">Frame rate</label>
+            <input type="number" id="fFps" min="1" max="120" placeholder="30" />
+          </div>
+          <div class="field">
+            <label for="fVBitrate">Video Bitrate (kbps)</label>
+            <input type="number" id="fVBitrate" min="500" max="50000" placeholder="4500" />
+          </div>
+          <div class="field">
+            <label for="fABitrate">Audio Bitrate (kbps)</label>
+            <input type="number" id="fABitrate" min="32" max="320" placeholder="128" />
+          </div>
+        </div>
+      </details>
+
+      <div class="field-row field-row-inline">
+        <label class="toggle-label">
+          <input type="checkbox" id="fAutoStart" />
+          Auto-start on server boot
+        </label>
+      </div>
+
+      <div class="form-error hidden" id="formError"></div>
+    </form>
+
+    <div class="modal-footer">
+      <button class="btn btn-ghost" id="modalCancel">Cancel</button>
+      <button class="btn btn-primary" id="modalSave">Save Stream</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════ CONFIRM DIALOG ══════════════════════════════ -->
+<div class="modal-backdrop hidden" id="confirmBackdrop">
+  <div class="modal modal-sm" role="dialog">
+    <div class="modal-header">
+      <h3 id="confirmTitle">Confirm</h3>
+    </div>
+    <div class="modal-body">
+      <p id="confirmMsg"></p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" id="confirmCancel">Cancel</button>
+      <button class="btn btn-danger" id="confirmOk">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════ TOAST ══════════════════════════════════════ -->
+<div class="toast-container" id="toastContainer" aria-live="polite"></div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="/js/app.js"></script>
+</body>
+</html>

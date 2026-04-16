@@ -1,0 +1,51 @@
+# fb-streamer.service
+# ===================
+# Copy to /etc/systemd/system/fb-streamer.service
+# Then: systemctl daemon-reload && systemctl enable --now fb-streamer
+#
+# EDIT these paths before copying:
+#   WorkingDirectory  → absolute path of the fb-streamer directory
+#   ExecStart         → same path + /server.js
+#   User              → system user that should own the process
+
+[Unit]
+Description=FB Live Streamer — Facebook RTMP streaming daemon
+Documentation=file:///opt/fb-streamer/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/opt/fb-streamer
+ExecStart=/usr/bin/node /opt/fb-streamer/server.js
+Restart=always
+RestartSec=5
+StartLimitInterval=60
+StartLimitBurst=10
+
+# ── Environment ────────────────────────────────────────────────────────────────
+Environment=NODE_ENV=production
+# Change 3000 to another port if needed
+Environment=PORT=3000
+# Bind only to localhost and reverse-proxy with nginx for HTTPS:
+# Environment=HOST=127.0.0.1
+
+# ── Resource limits ────────────────────────────────────────────────────────────
+# FFmpeg spawns one or two child processes per stream; keep limits generous.
+LimitNOFILE=65536
+LimitNPROC=8192
+
+# ── Logging (journald) ─────────────────────────────────────────────────────────
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=fb-streamer
+
+# ── Hardening (optional, uncomment to tighten)  ────────────────────────────────
+# PrivateTmp=true
+# NoNewPrivileges=true
+# ProtectSystem=strict
+# ReadWritePaths=/opt/fb-streamer/data
+
+[Install]
+WantedBy=multi-user.target

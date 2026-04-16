@@ -244,8 +244,37 @@ class StreamEngine extends EventEmitter {
                       ? this.config.customVideoBitrate * 2
                       : base.bufsize,
       audioBitrate: this.config.customAudioBitrate || base.audioBitrate,
-      sampleRate:   base.sampleRate,
-      channels:     base.channels,
+      sampleRate:   this.config.customSampleRate   || base.sampleRate,
+      channels:     this.config.customChannels     || base.channels,
+      // New custom FFmpeg properties
+      videoCodec:   this.config.customVideoCodec   || 'libx264',
+      audioCodec:   this.config.customAudioCodec   || 'aac',
+      presetSpeed:  this.config.customPresetSpeed  || 'veryfast',
+      tune:         this.config.customTune         || 'zerolatency',
+      profile:      this.config.customProfile      || 'main',
+      level:        this.config.customLevel        || '4.0',
+      keyframeInterval: this.config.customKeyframeInterval || null,
+      pixelFormat:  this.config.customPixelFormat  || 'yuv420p',
+      colorSpace:   this.config.customColorSpace   || null,
+      colorRange:   this.config.customColorRange   || null,
+      aspectRatio:  this.config.customAspectRatio  || null,
+      frameMode:    this.config.customFrameMode    || 'cfr', // cfr, vfr
+      gopSize:      this.config.customGopSize      || null,
+      bframes:      this.config.customBframes      ?? null,
+      refs:         this.config.customRefs         ?? null,
+      scThreshold:  this.config.customScThreshold  ?? 0,
+      qpMin:        this.config.customQpMin        ?? null,
+      qpMax:        this.config.customQpMax        ?? null,
+      crf:          this.config.customCrf          ?? null,
+      rateControl:  this.config.customRateControl  || 'vbr', // vbr, cbr, crf
+      audioSampleFmt: this.config.customAudioSampleFmt || null,
+      deinterlace:  this.config.customDeinterlace  || false,
+      denoise:      this.config.customDenoise      || false,
+      sharpen:      this.config.customSharpen      || false,
+      extraInputOpts: this.config.customExtraInputOpts || [],
+      extraOutputOpts: this.config.customExtraOutputOpts || [],
+      videoFilterChain: this.config.customVideoFilterChain || [],
+      audioFilterChain: this.config.customAudioFilterChain || [],
     };
   }
 

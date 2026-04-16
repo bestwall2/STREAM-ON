@@ -90,6 +90,31 @@ app.post('/api/streams', validateBody, (req, res) => {
       customVideoBitrate: data.customVideoBitrate || null,
       customAudioBitrate: data.customAudioBitrate || null,
       autoStart:          !!data.autoStart,
+      
+      // Advanced encoding settings
+      encodingMode:       data.encodingMode       || 'reencode',
+      videoCodec:         data.videoCodec         || 'libx264',
+      encoderPreset:      data.encoderPreset      || 'veryfast',
+      rateControl:        data.rateControl        || 'cbr',
+      maxBitrate:         data.maxBitrate         || null,
+      bufferSize:         data.bufferSize         || null,
+      crfValue:           data.crfValue           || null,
+      keyframeInterval:   data.keyframeInterval   || null,
+      profile:            data.profile            || 'main',
+      level:              data.level              || '4.0',
+      pixelFormat:        data.pixelFormat        || 'yuv420p',
+      colorSpace:         data.colorSpace         || 'bt709',
+      videoFilters:       data.videoFilters       || '',
+      audioCodec:         data.audioCodec         || 'aac',
+      sampleRate:         data.sampleRate         || '48000',
+      audioChannels:      data.audioChannels      || '2',
+      audioFilters:       data.audioFilters       || '',
+      threads:            data.threads            || null,
+      tune:               data.tune               || '',
+      x264Params:         data.x264Params         || '',
+      customFlags:        data.customFlags        || '',
+      rawCommand:         data.rawCommand         || '',
+      useRawCommand:      !!data.useRawCommand,
     });
     ok(res, stream, 201);
   } catch (e) {
@@ -135,6 +160,52 @@ app.post('/api/streams/:id/restart', requireId, (req, res) => {
 app.get('/api/streams/:id/logs', requireId, (req, res) => {
   const limit = Math.min(parseInt(req.query.limit, 10) || 200, 600);
   ok(res, manager.getStreamLogs(req.params.id, limit));
+});
+
+// ── Stream analysis ────────────────────────────────────────────────────────────
+
+const { exec } = require('child_process');
+const util = require('util');
+const execPromise = util.promisify(exec);
+
+app.post('/api/analyze', async (req, res) => {
+  try {
+    const { sourceUrl } = req.body;
+    if (!sourceUrl) {
+      return err(res, 'sourceUrl is required', 400);
+    }
+    
+    // Use ffprobe to analyze the stream
+    const probeCmd = `ffprobe -v quiet -print_format json -show_streams -select_streams v:0,a:0 "${sourceUrl}"`;
+    const { stdout } = await execPromise(probeCmd, { timeout: 30000 });
+    
+    const result = JSON.parse(stdout);
+    const videoStream = result.streams?.find(s => s.codec_type === 'video');
+    const audioStream = result.streams?.find(s => s.codec_type === 'audio');
+    
+    ok(res, {
+      video: videoStream ? {
+        codec_name: videoStream.codec_name,
+        codec_long_name: videoStream.codec_long_name,
+        width: videoStream.width,
+        height: videoStream.height,
+        r_frame_rate: videoStream.r_frame_rate,
+        pix_fmt: videoStream.pix_fmt,
+        bit_rate: videoStream.bit_rate,
+      } : null,
+      audio: audioStream ? {
+        codec_name: audioStream.codec_name,
+        codec_long_name: audioStream.codec_long_name,
+        sample_rate: audioStream.sample_rate,
+        channels: audioStream.channels,
+        bit_rate: audioStream.bit_rate,
+      } : null,
+      compatible: (videoStream?.codec_name === 'h264') && (audioStream?.codec_name === 'aac'),
+    });
+  } catch (e) {
+    console.error('[analyze] error:', e.message);
+    err(res, 'Failed to analyze stream: ' + e.message);
+  }
 });
 
 // ─── Socket.IO ──────────────────────────────────────────────────────────────

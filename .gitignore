@@ -1,21 +1,32 @@
 ```
-# Dependencies
-node_modules/
-
-# Logs and temp files
-*.log
-*.tmp
+# Database files
+*.db
 
 # Environment
 .env
 .env.local
 *.env.*
 
-# Editors
-.vscode/
-.idea/
+# Dependencies
+node_modules/
+.venv/
+venv/
+__pycache__/
 
 # Build artifacts
 dist/
 build/
+target/
+
+# Logs and temp files
+*.log
+*.tmp
+
+# Editors
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
 ```

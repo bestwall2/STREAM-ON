@@ -16,6 +16,47 @@ db.pragma('journal_mode = WAL');
 db.pragma('synchronous  = NORMAL');
 db.pragma('foreign_keys = ON');
 
+// ─── Migration: Add missing columns to existing tables ────────────────────────
+try {
+  // Check and add encoding_mode column
+  const cols = db.pragma("table_info(streams)");
+  const colNames = cols.map(c => c.name);
+  
+  const columnsToAdd = [
+    { name: 'encoding_mode', def: "TEXT DEFAULT 'reencode'" },
+    { name: 'video_codec', def: "TEXT DEFAULT 'libx264'" },
+    { name: 'encoder_preset', def: "TEXT DEFAULT 'medium'" },
+    { name: 'rate_control', def: "TEXT DEFAULT 'CBR'" },
+    { name: 'max_bitrate', def: 'INTEGER' },
+    { name: 'buffer_size', def: 'INTEGER' },
+    { name: 'crf_value', def: 'INTEGER DEFAULT 23' },
+    { name: 'keyframe_interval', def: 'INTEGER' },
+    { name: 'profile', def: "TEXT DEFAULT 'main'" },
+    { name: 'level', def: "TEXT DEFAULT '4.0'" },
+    { name: 'pixel_format', def: "TEXT DEFAULT 'yuv420p'" },
+    { name: 'color_space', def: "TEXT DEFAULT 'bt709'" },
+    { name: 'video_filters', def: 'TEXT' },
+    { name: 'audio_codec', def: "TEXT DEFAULT 'aac'" },
+    { name: 'sample_rate', def: 'INTEGER DEFAULT 44100' },
+    { name: 'audio_channels', def: 'INTEGER DEFAULT 2' },
+    { name: 'audio_filters', def: 'TEXT' },
+    { name: 'threads', def: 'INTEGER DEFAULT 0' },
+    { name: 'tune', def: 'TEXT' },
+    { name: 'x264_params', def: 'TEXT' },
+    { name: 'custom_flags', def: 'TEXT' },
+    { name: 'raw_command', def: 'TEXT' },
+    { name: 'use_raw_command', def: 'INTEGER DEFAULT 0' }
+  ];
+  
+  for (const col of columnsToAdd) {
+    if (!colNames.includes(col.name)) {
+      db.exec(`ALTER TABLE streams ADD COLUMN ${col.name} ${col.def}`);
+    }
+  }
+} catch (e) {
+  console.error('Migration warning:', e.message);
+}
+
 // ─── Schema ─────────────────────────────────────────────────────────────────
 
 db.exec(`
@@ -60,6 +101,29 @@ db.exec(`
     custom_extra_output_opts TEXT,
     custom_video_filter_chain TEXT,
     custom_audio_filter_chain TEXT,
+    encoding_mode        TEXT    DEFAULT 'reencode',
+    video_codec          TEXT    DEFAULT 'libx264',
+    encoder_preset       TEXT    DEFAULT 'medium',
+    rate_control         TEXT    DEFAULT 'CBR',
+    max_bitrate          INTEGER,
+    buffer_size          INTEGER,
+    crf_value            INTEGER DEFAULT 23,
+    keyframe_interval    INTEGER,
+    profile              TEXT    DEFAULT 'main',
+    level                TEXT    DEFAULT '4.0',
+    pixel_format         TEXT    DEFAULT 'yuv420p',
+    color_space          TEXT    DEFAULT 'bt709',
+    video_filters        TEXT,
+    audio_codec          TEXT    DEFAULT 'aac',
+    sample_rate          INTEGER DEFAULT 44100,
+    audio_channels       INTEGER DEFAULT 2,
+    audio_filters        TEXT,
+    threads              INTEGER DEFAULT 0,
+    tune                 TEXT,
+    x264_params          TEXT,
+    custom_flags         TEXT,
+    raw_command          TEXT,
+    use_raw_command      INTEGER DEFAULT 0,
     auto_start           INTEGER NOT NULL DEFAULT 0,
     created_at           INTEGER NOT NULL,
     updated_at           INTEGER NOT NULL

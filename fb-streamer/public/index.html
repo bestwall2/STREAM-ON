@@ -168,27 +168,236 @@
       <!-- Custom settings (shown only when preset = 'custom') -->
       <details class="custom-settings" id="customSettingsBlock">
         <summary>Custom Video / Audio Settings</summary>
-        <div class="custom-grid">
-          <div class="field">
-            <label for="fWidth">Width (px)</label>
-            <input type="number" id="fWidth" min="240" max="3840" placeholder="1280" />
+        
+        <!-- Encoding Mode Section -->
+        <div class="settings-section">
+          <h4>Encoding Mode</h4>
+          <div class="field-row field-row-inline">
+            <label class="radio-label">
+              <input type="radio" name="fEncodingMode" value="copy" id="fEncodingCopy" />
+              <span>Copy (No Re-encoding) - Passthrough source streams</span>
+            </label>
+            <label class="radio-label">
+              <input type="radio" name="fEncodingMode" value="reencode" id="fEncodingReencode" checked />
+              <span>Re-encode - Convert for Facebook compatibility</span>
+            </label>
           </div>
-          <div class="field">
-            <label for="fHeight">Height (px)</label>
-            <input type="number" id="fHeight" min="144" max="2160" placeholder="720" />
+          <div class="compatibility-info hidden" id="compatibilityInfo">
+            <div class="info-box info-warning">
+              <strong>⚠️ Compatibility Warning:</strong>
+              <p id="compatibilityMsg"></p>
+            </div>
           </div>
-          <div class="field">
-            <label for="fFps">Frame rate</label>
-            <input type="number" id="fFps" min="1" max="120" placeholder="30" />
+          <button type="button" class="btn btn-sm btn-secondary" id="btnAnalyzeSource">🔍 Analyze Source Stream</button>
+          <div class="source-analysis hidden" id="sourceAnalysis">
+            <div class="analysis-result">
+              <strong>Source Stream Info:</strong>
+              <pre id="analysisOutput"></pre>
+            </div>
           </div>
-          <div class="field">
-            <label for="fVBitrate">Video Bitrate (kbps)</label>
-            <input type="number" id="fVBitrate" min="500" max="50000" placeholder="4500" />
+        </div>
+
+        <!-- Video Settings -->
+        <div class="settings-section">
+          <h4>Video Settings</h4>
+          <div class="custom-grid">
+            <div class="field">
+              <label for="fVideoCodec">Video Codec</label>
+              <select id="fVideoCodec">
+                <option value="libx264">H.264 (libx264) - Recommended for Facebook</option>
+                <option value="copy">Copy (Passthrough)</option>
+                <option value="libx265">H.265 (HEVC)</option>
+                <option value="vp9">VP9</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="fPreset">Encoder Preset</label>
+              <select id="fPreset">
+                <option value="ultrafast">Ultrafast</option>
+                <option value="superfast">Superfast</option>
+                <option value="veryfast">Veryfast (Recommended)</option>
+                <option value="faster">Faster</option>
+                <option value="fast">Fast</option>
+                <option value="medium">Medium</option>
+                <option value="slow">Slow</option>
+                <option value="slower">Slower</option>
+                <option value="veryslow">Veryslow</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="fRateControl">Rate Control Mode</label>
+              <select id="fRateControl">
+                <option value="cbr">CBR (Constant Bitrate) - Best for live streaming</option>
+                <option value="vbr">VBR (Variable Bitrate)</option>
+                <option value="crf">CRF (Constant Quality)</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="fVBitrate">Video Bitrate (kbps)</label>
+              <input type="number" id="fVBitrate" min="500" max="50000" placeholder="4500" value="4500" />
+            </div>
+            <div class="field">
+              <label for="fMaxBitrate">Max Bitrate (kbps)</label>
+              <input type="number" id="fMaxBitrate" min="500" max="60000" placeholder="6000" />
+            </div>
+            <div class="field">
+              <label for="fBufferSize">Buffer Size (kbps)</label>
+              <input type="number" id="fBufferSize" min="1000" max="120000" placeholder="9000" />
+            </div>
+            <div class="field">
+              <label for="fCrfValue">CRF Value (if CRF mode)</label>
+              <input type="number" id="fCrfValue" min="0" max="51" placeholder="23" value="23" />
+            </div>
+            <div class="field">
+              <label for="fKeyframe">Keyframe Interval (seconds)</label>
+              <input type="number" id="fKeyframe" min="1" max="10" placeholder="2" value="2" />
+            </div>
+            <div class="field">
+              <label for="fWidth">Width (px)</label>
+              <input type="number" id="fWidth" min="240" max="3840" placeholder="1280" />
+            </div>
+            <div class="field">
+              <label for="fHeight">Height (px)</label>
+              <input type="number" id="fHeight" min="144" max="2160" placeholder="720" />
+            </div>
+            <div class="field">
+              <label for="fFps">Frame Rate (FPS)</label>
+              <input type="number" id="fFps" min="1" max="120" placeholder="30" value="30" />
+            </div>
+            <div class="field">
+              <label for="fProfile">H.264 Profile</label>
+              <select id="fProfile">
+                <option value="baseline">Baseline</option>
+                <option value="main" selected>Main (Recommended)</option>
+                <option value="high">High</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="fLevel">H.264 Level</label>
+              <select id="fLevel">
+                <option value="3.0">3.0</option>
+                <option value="3.1">3.1</option>
+                <option value="3.2">3.2</option>
+                <option value="4.0" selected>4.0 (Recommended)</option>
+                <option value="4.1">4.1</option>
+                <option value="4.2">4.2</option>
+                <option value="5.0">5.0</option>
+                <option value="5.1">5.1</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="fPixelFormat">Pixel Format</label>
+              <select id="fPixelFormat">
+                <option value="yuv420p" selected>yuv420p (Recommended)</option>
+                <option value="yuv422p">yuv422p</option>
+                <option value="yuv444p">yuv444p</option>
+                <option value="nv12">nv12</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="fColorSpace">Color Space</label>
+              <select id="fColorSpace">
+                <option value="bt709" selected>BT.709 (HD)</option>
+                <option value="bt601">BT.601 (SD)</option>
+                <option value="bt2020">BT.2020 (UHD/HDR)</option>
+              </select>
+            </div>
+            <div class="field full-width">
+              <label for="fVideoFilters">Custom Video Filters</label>
+              <input type="text" id="fVideoFilters" placeholder="e.g., scale=1280:720,fps=30,format=yuv420p" />
+              <span class="hint">Chain filters with comma. Examples: hue=s=0, eq=brightness=0.1, pad=1920:1080:(ow-iw)/2:(oh-ih)/2</span>
+            </div>
           </div>
-          <div class="field">
-            <label for="fABitrate">Audio Bitrate (kbps)</label>
-            <input type="number" id="fABitrate" min="32" max="320" placeholder="128" />
+        </div>
+
+        <!-- Audio Settings -->
+        <div class="settings-section">
+          <h4>Audio Settings</h4>
+          <div class="custom-grid">
+            <div class="field">
+              <label for="fAudioCodec">Audio Codec</label>
+              <select id="fAudioCodec">
+                <option value="aac">AAC - Required for Facebook</option>
+                <option value="copy">Copy (Passthrough)</option>
+                <option value="libmp3lame">MP3</option>
+                <option value="libopus">Opus</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="fABitrate">Audio Bitrate (kbps)</label>
+              <input type="number" id="fABitrate" min="32" max="320" placeholder="128" value="128" />
+            </div>
+            <div class="field">
+              <label for="fSampleRate">Sample Rate (Hz)</label>
+              <select id="fSampleRate">
+                <option value="44100">44100 Hz</option>
+                <option value="48000" selected>48000 Hz (Recommended)</option>
+                <option value="96000">96000 Hz</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="fAudioChannels">Audio Channels</label>
+              <select id="fAudioChannels">
+                <option value="1">Mono (1)</option>
+                <option value="2" selected>Stereo (2)</option>
+              </select>
+            </div>
+            <div class="field full-width">
+              <label for="fAudioFilters">Custom Audio Filters</label>
+              <input type="text" id="fAudioFilters" placeholder="e.g., volume=1.5,acompressor=threshold=-20dB:ratio=4" />
+              <span class="hint">Examples: volume=1.5, highpass=f=200, lowpass=f=3000, acompressor</span>
+            </div>
           </div>
+        </div>
+
+        <!-- Advanced Settings -->
+        <div class="settings-section">
+          <h4>Advanced FFmpeg Options</h4>
+          <div class="custom-grid">
+            <div class="field">
+              <label for="fThreads">Encoding Threads</label>
+              <input type="number" id="fThreads" min="1" max="32" placeholder="0 (auto)" value="0" />
+            </div>
+            <div class="field">
+              <label for="fTune">Tune Parameter</label>
+              <select id="fTune">
+                <option value="">None</option>
+                <option value="film">Film</option>
+                <option value="animation">Animation</option>
+                <option value="grain">Grain</option>
+                <option value="stillimage">Still Image</option>
+                <option value="fastdecode">Fast Decode</option>
+                <option value="zerolatency">Zero Latency (Live)</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="fX264Params">x264-params (advanced)</label>
+              <input type="text" id="fX264Params" placeholder="e.g., nal-hrd=cbr:force-cfr=1" />
+              <span class="hint">Colon-separated x264 parameters</span>
+            </div>
+            <div class="field full-width">
+              <label for="fCustomFlags">Custom FFmpeg Flags</label>
+              <input type="text" id="fCustomFlags" placeholder="-fflags +genpts -flags +low_delay" />
+              <span class="hint">Additional global FFmpeg flags</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Raw Command Editor -->
+        <div class="settings-section">
+          <h4>⚙️ Raw FFmpeg Command Editor</h4>
+          <p class="hint">Edit the complete FFmpeg command directly. Variables like {SOURCE}, {FB_URL}, {FB_KEY} will be replaced automatically.</p>
+          <div class="field full-width">
+            <textarea id="fRawCommand" rows="6" spellcheck="false" placeholder="FFmpeg command will auto-generate here..."></textarea>
+          </div>
+          <div class="field-row field-row-inline">
+            <label class="checkbox-label">
+              <input type="checkbox" id="fUseRawCommand" />
+              Use raw command instead of generated one (advanced users only)
+            </label>
+          </div>
+          <button type="button" class="btn btn-sm btn-secondary" id="btnGenerateCommand">🔄 Regenerate Command from Settings</button>
+          <button type="button" class="btn btn-sm btn-secondary" id="btnPreviewCommand">👁 Preview Final Command</button>
         </div>
       </details>
 

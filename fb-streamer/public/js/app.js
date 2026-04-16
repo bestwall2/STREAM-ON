@@ -55,6 +55,39 @@
   const fABitrate    = $('fABitrate');
   const btnToggleKey = $('btnToggleKey');
   const templateCard = $('tmplStreamCard');
+  
+  // New advanced encoding fields
+  const fEncodingCopy = $('fEncodingCopy');
+  const fEncodingReencode = $('fEncodingReencode');
+  const fVideoCodec = $('fVideoCodec');
+  const fEncoderPreset = $('fPreset');
+  const fRateControl = $('fRateControl');
+  const fMaxBitrate = $('fMaxBitrate');
+  const fBufferSize = $('fBufferSize');
+  const fCrfValue = $('fCrfValue');
+  const fKeyframe = $('fKeyframe');
+  const fProfile = $('fProfile');
+  const fLevel = $('fLevel');
+  const fPixelFormat = $('fPixelFormat');
+  const fColorSpace = $('fColorSpace');
+  const fVideoFilters = $('fVideoFilters');
+  const fAudioCodec = $('fAudioCodec');
+  const fSampleRate = $('fSampleRate');
+  const fAudioChannels = $('fAudioChannels');
+  const fAudioFilters = $('fAudioFilters');
+  const fThreads = $('fThreads');
+  const fTune = $('fTune');
+  const fX264Params = $('fX264Params');
+  const fCustomFlags = $('fCustomFlags');
+  const fRawCommand = $('fRawCommand');
+  const fUseRawCommand = $('fUseRawCommand');
+  const btnAnalyzeSource = $('btnAnalyzeSource');
+  const btnGenerateCommand = $('btnGenerateCommand');
+  const btnPreviewCommand = $('btnPreviewCommand');
+  const compatibilityInfo = $('compatibilityInfo');
+  const compatibilityMsg = $('compatibilityMsg');
+  const sourceAnalysis = $('sourceAnalysis');
+  const analysisOutput = $('analysisOutput');
 
   // ─── Socket.IO ──────────────────────────────────────────────────────────────
 
@@ -392,18 +425,52 @@
 
       const isCustom = s.preset === 'custom' || !state.presets[s.preset];
       presetSel.value = isCustom ? 'custom' : (s.preset || '720p30');
+      
+      // Basic custom settings
       fWidth.value    = s.customWidth        || '';
       fHeight.value   = s.customHeight       || '';
       fFps.value      = s.customFps          || '';
       fVBitrate.value = s.customVideoBitrate || '';
       fABitrate.value = s.customAudioBitrate || '';
+      
+      // Advanced encoding settings
+      const encMode = s.encodingMode || 'reencode';
+      if (encMode === 'copy') fEncodingCopy.checked = true;
+      else fEncodingReencode.checked = true;
+      
+      fVideoCodec.value = s.videoCodec || 'libx264';
+      fEncoderPreset.value = s.encoderPreset || 'veryfast';
+      fRateControl.value = s.rateControl || 'cbr';
+      fMaxBitrate.value = s.maxBitrate || '';
+      fBufferSize.value = s.bufferSize || '';
+      fCrfValue.value = s.crfValue || '23';
+      fKeyframe.value = s.keyframeInterval || '2';
+      fProfile.value = s.profile || 'main';
+      fLevel.value = s.level || '4.0';
+      fPixelFormat.value = s.pixelFormat || 'yuv420p';
+      fColorSpace.value = s.colorSpace || 'bt709';
+      fVideoFilters.value = s.videoFilters || '';
+      
+      fAudioCodec.value = s.audioCodec || 'aac';
+      fSampleRate.value = s.sampleRate || '48000';
+      fAudioChannels.value = s.audioChannels || '2';
+      fAudioFilters.value = s.audioFilters || '';
+      
+      fThreads.value = s.threads || '0';
+      fTune.value = s.tune || '';
+      fX264Params.value = s.x264Params || '';
+      fCustomFlags.value = s.customFlags || '';
+      fRawCommand.value = s.rawCommand || '';
+      fUseRawCommand.checked = !!s.useRawCommand;
     } else {
       streamForm.reset();
       fStreamId.value = '';
       presetSel.value = '720p30';
+      fEncodingReencode.checked = true;
     }
 
     toggleCustomSettings();
+    updateCommandPreview();
     modal.classList.remove('hidden');
     fName.focus();
   }
@@ -428,6 +495,31 @@
       customVideoBitrate: parseInt(fVBitrate.value) || null,
       customAudioBitrate: parseInt(fABitrate.value) || null,
       autoStart:          fAutoStart.checked,
+      
+      // Advanced encoding settings
+      encodingMode:       fEncodingCopy.checked ? 'copy' : 'reencode',
+      videoCodec:         fVideoCodec.value,
+      encoderPreset:      fEncoderPreset.value,
+      rateControl:        fRateControl.value,
+      maxBitrate:         parseInt(fMaxBitrate.value) || null,
+      bufferSize:         parseInt(fBufferSize.value) || null,
+      crfValue:           parseInt(fCrfValue.value) || null,
+      keyframeInterval:   parseInt(fKeyframe.value) || null,
+      profile:            fProfile.value,
+      level:              fLevel.value,
+      pixelFormat:        fPixelFormat.value,
+      colorSpace:         fColorSpace.value,
+      videoFilters:       fVideoFilters.value.trim(),
+      audioCodec:         fAudioCodec.value,
+      sampleRate:         fSampleRate.value,
+      audioChannels:      fAudioChannels.value,
+      audioFilters:       fAudioFilters.value.trim(),
+      threads:            parseInt(fThreads.value) || null,
+      tune:               fTune.value,
+      x264Params:         fX264Params.value.trim(),
+      customFlags:        fCustomFlags.value.trim(),
+      rawCommand:         fRawCommand.value,
+      useRawCommand:      fUseRawCommand.checked,
     };
 
     if (!body.name)         return showFormError('Stream name is required.');
@@ -555,6 +647,200 @@
   });
 
   presetSel.addEventListener('change', toggleCustomSettings);
+  
+  // Encoding mode and command generation event listeners
+  btnAnalyzeSource.addEventListener('click', analyzeSourceStream);
+  btnGenerateCommand.addEventListener('click', updateCommandPreview);
+  btnPreviewCommand.addEventListener('click', previewFinalCommand);
+  
+  // Auto-update command when settings change
+  [fEncodingCopy, fEncodingReencode, fVideoCodec, fEncoderPreset, fRateControl,
+   fVBitrate, fMaxBitrate, fBufferSize, fCrfValue, fKeyframe, fProfile, fLevel,
+   fPixelFormat, fColorSpace, fVideoFilters, fAudioCodec, fABitrate, fSampleRate,
+   fAudioChannels, fAudioFilters, fThreads, fTune, fX264Params, fCustomFlags]
+    .forEach(el => el.addEventListener('change', updateCommandPreview));
+  [fVBitrate, fMaxBitrate, fBufferSize, fCrfValue, fKeyframe, fWidth, fHeight, fFps].forEach(el => {
+    el.addEventListener('input', updateCommandPreview);
+  });
+
+  function analyzeSourceStream() {
+    const sourceUrl = fSourceUrl.value.trim();
+    if (!sourceUrl) {
+      toast('Please enter a source URL first', 'warn');
+      return;
+    }
+    
+    btnAnalyzeSource.disabled = true;
+    btnAnalyzeSource.textContent = '🔍 Analyzing...';
+    
+    api.post('/api/analyze', { sourceUrl })
+      .then(result => {
+        sourceAnalysis.classList.remove('hidden');
+        analysisOutput.textContent = JSON.stringify(result, null, 2);
+        
+        // Check Facebook compatibility
+        const videoCodec = result.video?.codec_name;
+        const audioCodec = result.audio?.codec_name;
+        const isVideoCompatible = videoCodec === 'h264';
+        const isAudioCompatible = audioCodec === 'aac';
+        
+        if (isVideoCompatible && isAudioCompatible) {
+          compatibilityInfo.classList.add('hidden');
+          toast('Source is compatible with Facebook - Copy mode can be used', 'success');
+        } else {
+          compatibilityInfo.classList.remove('hidden');
+          let msg = '<ul>';
+          if (!isVideoCompatible) msg += `<li>Video: ${videoCodec || 'unknown'} → Needs H.264 re-encoding</li>`;
+          if (!isAudioCompatible) msg += `<li>Audio: ${audioCodec || 'unknown'} → Needs AAC re-encoding</li>`;
+          msg += '</ul><p>Recommendation: Use Re-encode mode for Facebook compatibility.</p>';
+          compatibilityMsg.innerHTML = msg;
+          toast('Source needs re-encoding for Facebook compatibility', 'warn');
+        }
+      })
+      .catch(err => {
+        toast('Failed to analyze source: ' + err.message, 'error');
+      })
+      .finally(() => {
+        btnAnalyzeSource.disabled = false;
+        btnAnalyzeSource.textContent = '🔍 Analyze Source Stream';
+      });
+  }
+  
+  function updateCommandPreview() {
+    const cmd = generateFFmpegCommand();
+    fRawCommand.value = cmd;
+  }
+  
+  function generateFFmpegCommand() {
+    const source = '{SOURCE}';
+    const fbUrl = 'rtmp://live-api-s.facebook.com:80/rtmp/{FB_KEY}';
+    
+    let args = ['-i', source];
+    
+    // Custom flags
+    const customFlags = fCustomFlags.value.trim();
+    if (customFlags) {
+      args.push(...customFlags.split(/\s+/));
+    }
+    
+    // Video settings
+    const encodingMode = fEncodingCopy.checked ? 'copy' : 'reencode';
+    const videoCodec = fVideoCodec.value;
+    
+    if (encodingMode === 'copy' || videoCodec === 'copy') {
+      args.push('-vcodec', 'copy');
+    } else {
+      args.push('-vcodec', videoCodec);
+      
+      // Preset
+      const preset = fEncoderPreset.value;
+      if (preset) args.push('-preset', preset);
+      
+      // Rate control
+      const rateControl = fRateControl.value;
+      const vBitrate = fVBitrate.value;
+      const maxBitrate = fMaxBitrate.value;
+      const bufferSize = fBufferSize.value;
+      const crfValue = fCrfValue.value;
+      
+      if (rateControl === 'cbr' && vBitrate) {
+        args.push('-b:v', `${vBitrate}k`);
+        if (maxBitrate) args.push('-maxrate', `${maxBitrate}k`);
+        if (bufferSize) args.push('-bufsize', `${bufferSize}k`);
+      } else if (rateControl === 'vbr' && vBitrate) {
+        args.push('-b:v', `${vBitrate}k`);
+        if (maxBitrate) args.push('-maxrate', `${maxBitrate}k`);
+        if (bufferSize) args.push('-bufsize', `${bufferSize}k`);
+      } else if (rateControl === 'crf') {
+        args.push('-crf', crfValue);
+      }
+      
+      // Keyframe
+      const keyframe = fKeyframe.value;
+      if (keyframe) args.push('-g', keyframe, '-keyint_min', keyframe);
+      
+      // Profile and level
+      const profile = fProfile.value;
+      const level = fLevel.value;
+      if (profile) args.push('-profile:v', profile);
+      if (level) args.push('-level', level);
+      
+      // Pixel format
+      const pixelFormat = fPixelFormat.value;
+      if (pixelFormat) args.push('-pix_fmt', pixelFormat);
+      
+      // Color space
+      const colorSpace = fColorSpace.value;
+      if (colorSpace) {
+        args.push('-colorspace', colorSpace);
+        args.push('-color_primaries', colorSpace === 'bt709' ? 'bt709' : (colorSpace === 'bt2020' ? 'bt2020' : 'bt470bg'));
+        args.push('-color_trc', colorSpace === 'bt709' ? 'bt709' : (colorSpace === 'bt2020' ? 'bt2020' : 'bt470bg'));
+      }
+      
+      // Threads
+      const threads = fThreads.value;
+      if (threads && threads !== '0') args.push('-threads', threads);
+      
+      // Tune
+      const tune = fTune.value;
+      if (tune) args.push('-tune', tune);
+      
+      // x264 params
+      const x264Params = fX264Params.value.trim();
+      if (x264Params && videoCodec === 'libx264') {
+        args.push('-x264-params', x264Params);
+      }
+    }
+    
+    // Video filters
+    const videoFilters = fVideoFilters.value.trim();
+    if (videoFilters) {
+      args.push('-vf', videoFilters);
+    }
+    
+    // Audio settings
+    const audioCodec = fAudioCodec.value;
+    
+    if (encodingMode === 'copy' && fEncodingCopy.checked && audioCodec === 'copy') {
+      args.push('-acodec', 'copy');
+    } else {
+      args.push('-acodec', audioCodec);
+      
+      const aBitrate = fABitrate.value;
+      if (aBitrate && audioCodec !== 'copy') {
+        args.push('-b:a', `${aBitrate}k`);
+      }
+      
+      const sampleRate = fSampleRate.value;
+      if (sampleRate) args.push('-ar', sampleRate);
+      
+      const channels = fAudioChannels.value;
+      if (channels) args.push('-ac', channels);
+    }
+    
+    // Audio filters
+    const audioFilters = fAudioFilters.value.trim();
+    if (audioFilters) {
+      args.push('-af', audioFilters);
+    }
+    
+    // Output
+    args.push('-f', 'flv', fbUrl);
+    
+    return 'ffmpeg ' + args.map(a => a.includes(' ') ? `"${a}"` : a).join(' ');
+  }
+  
+  function previewFinalCommand() {
+    const sourceUrl = fSourceUrl.value.trim() || 'http://example.com/stream.m3u8';
+    const fbKey = fFbKey.value.trim() || 'YOUR_STREAM_KEY';
+    let cmd = fRawCommand.value;
+    
+    cmd = cmd.replace(/{SOURCE}/g, sourceUrl);
+    cmd = cmd.replace(/{FB_KEY}/g, fbKey);
+    cmd = cmd.replace(/{FB_URL}/g, `rtmp://live-api-s.facebook.com:80/rtmp/${fbKey}`);
+    
+    alert('Final FFmpeg Command:\n\n' + cmd);
+  }
 
   btnToggleKey.addEventListener('click', () => {
     const isPass = fFbKey.type === 'password';

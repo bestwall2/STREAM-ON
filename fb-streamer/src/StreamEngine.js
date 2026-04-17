@@ -103,6 +103,8 @@ class StreamEngine extends EventEmitter {
     this.startedAt        = null;
     this.reconnectCount   = 0;
     this._backoff         = BACKOFF_INIT;
+    this._runtimeForceReencode = false;
+    this._fbOutputFailures = 0;
 
     // Stats (updated by FFmpeg stderr parser)
     this.stats = {
@@ -140,6 +142,8 @@ class StreamEngine extends EventEmitter {
     this._stopping = false;
     this._backoff  = BACKOFF_INIT;
     this.reconnectCount = 0;
+    this._runtimeForceReencode = false;
+    this._fbOutputFailures = 0;
     this.startedAt = Date.now();
 
     this._log('info', `Stream starting — source: ${this.config.sourceUrl}`);
@@ -302,8 +306,12 @@ class StreamEngine extends EventEmitter {
    */
   _buildMainArgs() {
     const p = this._resolvePreset();
+    const copyMode = this.config.encodingMode === 'copy' && !this._runtimeForceReencode;
+    const fpsMode = (p.frameMode === 'vfr') ? 'vfr' : 'cfr';
+    const videoCodec = copyMode ? 'copy' : (p.videoCodec || 'libx264');
+    const audioCodec = copyMode ? 'copy' : (p.audioCodec || 'aac');
 
-    return [
+    const args = [
       '-hide_banner',
 
       // ── Input resilience for network sources ──────────────────────────────
@@ -321,56 +329,61 @@ class StreamEngine extends EventEmitter {
       '-probesize',       '10000000',
 
       // ── Error-tolerance input flags ───────────────────────────────────────
-      // genpts   → synthesise missing PTS
-      // igndts   → ignore DTS inconsistencies
-      // discardcorrupt → discard corrupt packets instead of aborting
       '-fflags', '+genpts+igndts+discardcorrupt',
       '-flags',  '+low_delay',
       '-err_detect', 'ignore_err',
       '-use_wallclock_as_timestamps', '1',
 
-      // Audio handling: tolerate mono/missing audio tracks
-      '-af', 'aresample=async=1:first_pts=0',
-
-      // ── Logging: only warnings + stats line on stderr ─────────────────────
+      // ── Logging ───────────────────────────────────────────────────────────
       '-loglevel', 'warning',
       '-stats',
 
       // ── Input ─────────────────────────────────────────────────────────────
       '-i', this.config.sourceUrl,
+    ];
 
+    if (copyMode) {
+      args.push('-c:v', 'copy', '-c:a', 'copy');
+    } else {
       // ── Video filter chain ────────────────────────────────────────────────
-      '-vf', [
+      args.push('-vf', [
         `fps=${p.fps}`,
         `scale=${p.width}:${p.height}:force_original_aspect_ratio=decrease`,
         `pad=${p.width}:${p.height}:(ow-iw)/2:(oh-ih)/2:color=black`,
         'setsar=1',
-        'format=yuv420p',
-      ].join(','),
+        `format=${p.pixelFormat || 'yuv420p'}`,
+      ].join(','));
 
       // ── Video encoder ─────────────────────────────────────────────────────
-      '-c:v',        'libx264',
-      '-preset',     'veryfast',
-      '-tune',       'zerolatency',
-      '-b:v',        `${p.videoBitrate}k`,
-      '-maxrate',    `${p.maxrate}k`,
-      '-bufsize',    `${p.bufsize}k`,
-      '-g',          String(p.fps * 2),
-      '-keyint_min', String(p.fps),
-      '-sc_threshold', '0',
-      '-r',          String(p.fps),
-      '-vsync',      'cfr',    // constant frame-rate
+      args.push('-c:v', videoCodec);
+      if (videoCodec === 'libx264') {
+        args.push('-preset', p.presetSpeed || 'veryfast');
+        if (p.tune) args.push('-tune', p.tune);
+        if (p.profile) args.push('-profile:v', p.profile);
+        if (p.level) args.push('-level:v', p.level);
+      }
+      if (p.rateControl === 'crf' && p.crf != null) {
+        args.push('-crf', String(p.crf));
+      } else {
+        args.push('-b:v', `${p.videoBitrate}k`, '-maxrate', `${p.maxrate}k`, '-bufsize', `${p.bufsize}k`);
+      }
+      args.push('-g', String(p.gopSize || (p.fps * 2)));
+      args.push('-keyint_min', String(p.keyframeInterval || p.fps));
+      args.push('-sc_threshold', String(p.scThreshold ?? 0));
+      args.push('-r', String(p.fps));
+      args.push('-fps_mode', fpsMode);
 
       // ── Audio encoder ─────────────────────────────────────────────────────
-      '-c:a', 'aac',
-      '-b:a', `${p.audioBitrate}k`,
-      '-ar',  String(p.sampleRate),
-      '-ac',  String(p.channels),
+      args.push('-c:a', audioCodec);
+      if (audioCodec !== 'copy') {
+        args.push('-af', 'aresample=async=1:first_pts=0');
+        args.push('-b:a', `${p.audioBitrate}k`, '-ar', String(p.sampleRate), '-ac', String(p.channels));
+      }
+    }
 
-      // ── Output ────────────────────────────────────────────────────────────
-      '-f',   'flv',
-      this.fbRtmpUrl,
-    ];
+    // ── Output ──────────────────────────────────────────────────────────────
+    args.push('-f', 'flv', this.fbRtmpUrl);
+    return args;
   }
 
   /**
@@ -411,7 +424,7 @@ class StreamEngine extends EventEmitter {
       '-bufsize',    '1800k',
       '-g',          String(p.fps * 2),
       '-r',          String(p.fps),
-      '-vsync',      'cfr',
+      '-fps_mode',   'cfr',
 
       '-c:a', 'aac',
       '-b:a', '64k',
@@ -481,6 +494,7 @@ class StreamEngine extends EventEmitter {
       for (const l of lines) {
         const t = l.trim();
         if (!t || /^frame=/.test(t)) continue;
+        this._noteFacebookOutputFailure(t);
         if (/error|invalid|fail/i.test(t)) this._log('warn', `[slate] ${t}`);
       }
     });
@@ -656,6 +670,7 @@ class StreamEngine extends EventEmitter {
       if (bitrate !== null) this.stats.bitrate       = parseFloat(bitrate);
       if (dropped !== null) this.stats.droppedFrames = parseInt(dropped, 10);
       if (speed   !== null) this.stats.speed         = parseFloat(speed);
+      this._fbOutputFailures = 0;
 
       this.emit('stats', { streamId: this.config.id, stats: { ...this.stats } });
       return;
@@ -665,6 +680,7 @@ class StreamEngine extends EventEmitter {
     let level = 'info';
     if (/error|invalid|corrupt|fail|refused|abort|broken|reset/i.test(line)) level = 'error';
     else if (/warn|wrong|missing|deprecated|mismatch|packet dts/i.test(line))  level = 'warn';
+    this._noteFacebookOutputFailure(line);
     this._log(level, line);
   }
 }

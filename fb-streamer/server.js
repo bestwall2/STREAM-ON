@@ -164,9 +164,7 @@ app.get('/api/streams/:id/logs', requireId, (req, res) => {
 
 // ── Stream analysis ────────────────────────────────────────────────────────────
 
-const { exec } = require('child_process');
-const util = require('util');
-const execPromise = util.promisify(exec);
+const { spawn } = require('child_process');
 
 app.post('/api/analyze', async (req, res) => {
   try {
@@ -175,14 +173,68 @@ app.post('/api/analyze', async (req, res) => {
       return err(res, 'sourceUrl is required', 400);
     }
     
-    // Use ffprobe to analyze the stream
-    const probeCmd = `ffprobe -v quiet -print_format json -show_streams -select_streams v:0,a:0 "${sourceUrl}"`;
-    const { stdout } = await execPromise(probeCmd, { timeout: 30000 });
-    
-    const result = JSON.parse(stdout);
+    // Use ffprobe to analyze the stream (spawned args: no shell interpolation)
+    const probeArgs = [
+      '-v', 'quiet',
+      '-print_format', 'json',
+      '-show_streams',
+      '-select_streams', 'v:0,a:0',
+      sourceUrl,
+    ];
+
+    const result = await new Promise((resolve, reject) => {
+      const proc = spawn('ffprobe', probeArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+      let stdout = '';
+      let stderr = '';
+
+      const timer = setTimeout(() => {
+        try { proc.kill('SIGKILL'); } catch (_) {}
+        reject(new Error('ffprobe timed out after 30s'));
+      }, 30000);
+
+      proc.stdout.on('data', d => { stdout += d.toString(); });
+      proc.stderr.on('data', d => { stderr += d.toString(); });
+      proc.on('error', err => {
+        clearTimeout(timer);
+        reject(err);
+      });
+      proc.on('exit', code => {
+        clearTimeout(timer);
+        if (code !== 0) {
+          reject(new Error((stderr || `ffprobe exited with code ${code}`).trim()));
+          return;
+        }
+        try {
+          resolve(JSON.parse(stdout));
+        } catch (e) {
+          reject(new Error(`Invalid ffprobe JSON: ${e.message}`));
+        }
+      });
+    });
     const videoStream = result.streams?.find(s => s.codec_type === 'video');
     const audioStream = result.streams?.find(s => s.codec_type === 'audio');
     
+    const parseFps = (r) => {
+      if (!r) return 0;
+      if (!String(r).includes('/')) return Number(r) || 0;
+      const [n, d] = String(r).split('/').map(Number);
+      return (!Number.isFinite(n) || !Number.isFinite(d) || d === 0) ? 0 : n / d;
+    };
+
+    const width = Number(videoStream?.width) || 0;
+    const height = Number(videoStream?.height) || 0;
+    const fps = parseFps(videoStream?.r_frame_rate);
+    const videoCodec = videoStream?.codec_name;
+    const audioCodec = audioStream?.codec_name;
+    const pixFmt = (videoStream?.pix_fmt || '').toLowerCase();
+
+    const issues = [];
+    if (videoCodec !== 'h264') issues.push(`Video codec is ${videoCodec || 'unknown'} (Facebook copy mode needs h264).`);
+    if (audioStream && audioCodec !== 'aac') issues.push(`Audio codec is ${audioCodec || 'unknown'} (Facebook copy mode needs aac).`);
+    if (width > 1920 || height > 1080) issues.push(`Resolution is ${width}x${height} (Facebook recommends up to 1920x1080).`);
+    if (fps > 60) issues.push(`Frame rate is ${fps.toFixed(2)} (Facebook recommends up to 60 fps).`);
+    if (pixFmt && pixFmt !== 'yuv420p') issues.push(`Pixel format is ${pixFmt} (Facebook copy mode works best with yuv420p).`);
+
     ok(res, {
       video: videoStream ? {
         codec_name: videoStream.codec_name,
@@ -190,6 +242,7 @@ app.post('/api/analyze', async (req, res) => {
         width: videoStream.width,
         height: videoStream.height,
         r_frame_rate: videoStream.r_frame_rate,
+        fps,
         pix_fmt: videoStream.pix_fmt,
         bit_rate: videoStream.bit_rate,
       } : null,
@@ -200,7 +253,9 @@ app.post('/api/analyze', async (req, res) => {
         channels: audioStream.channels,
         bit_rate: audioStream.bit_rate,
       } : null,
-      compatible: (videoStream?.codec_name === 'h264') && (audioStream?.codec_name === 'aac'),
+      compatible: issues.length === 0,
+      issues,
+      recommendedMode: issues.length === 0 ? 'copy' : 'reencode',
     });
   } catch (e) {
     console.error('[analyze] error:', e.message);

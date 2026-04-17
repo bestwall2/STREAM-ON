@@ -16,6 +16,7 @@
     presets:  {},          // preset key → preset info
     editingId: null,       // null = creating, string = editing
     logPanels: new Map(),  // id → { open, autoscroll, el }
+    lastAnalysis: null,    // latest /api/analyze result for current source
   };
 
   // ─── DOM refs ───────────────────────────────────────────────────────────────
@@ -482,11 +483,13 @@
       fCustomFlags.value = s.customFlags || '';
       fRawCommand.value = s.rawCommand || '';
       fUseRawCommand.checked = !!s.useRawCommand;
+      state.lastAnalysis = null;
     } else {
       streamForm.reset();
       fStreamId.value = '';
       presetSel.value = '720p30';
-      fEncodingReencode.checked = true;
+      applyFacebookDefaults();
+      state.lastAnalysis = null;
     }
 
     toggleCustomSettings();
@@ -495,6 +498,29 @@
     refreshFfmpegGuideSelection();
     modal.classList.remove('hidden');
     fName.focus();
+  }
+
+  function applyFacebookDefaults() {
+    fEncodingCopy.checked = true;
+    fVideoCodec.value = 'copy';
+    fEncoderPreset.value = 'veryfast';
+    fRateControl.value = 'cbr';
+    fVBitrate.value = '4500';
+    fMaxBitrate.value = '4500';
+    fBufferSize.value = '9000';
+    fCrfValue.value = '23';
+    fKeyframe.value = '2';
+    fFps.value = '30';
+    fProfile.value = 'main';
+    fLevel.value = '4.0';
+    fPixelFormat.value = 'yuv420p';
+    fColorSpace.value = 'bt709';
+    fAudioCodec.value = 'copy';
+    fABitrate.value = '128';
+    fSampleRate.value = '48000';
+    fAudioChannels.value = '2';
+    fTune.value = 'zerolatency';
+    fThreads.value = '0';
   }
 
   function closeModal() {
@@ -547,6 +573,22 @@
     if (!body.name)         return showFormError('Stream name is required.');
     if (!body.sourceUrl)    return showFormError('Source URL is required.');
     if (!body.fbStreamKey)  return showFormError('Facebook Stream Key is required.');
+    if (body.encodingMode === 'copy') {
+      let analysis = state.lastAnalysis;
+      if (!analysis || analysis.sourceUrl !== body.sourceUrl) {
+        try {
+          analysis = await api.post('/api/analyze', { sourceUrl: body.sourceUrl });
+          state.lastAnalysis = { ...analysis, sourceUrl: body.sourceUrl };
+        } catch (e) {
+          analysis = null;
+        }
+      }
+      if (!analysis?.compatible) {
+        body.encodingMode = 'reencode';
+        fEncodingReencode.checked = true;
+        toast('Copy mode is preferred, but this source is incompatible. Switched to Re-encode for Facebook.', 'warn');
+      }
+    }
 
     modalSave.disabled = true;
     modalSave.textContent = 'Saving…';
@@ -690,6 +732,7 @@
       refreshFfmpegGuideSelection();
     });
   });
+  fSourceUrl.addEventListener('input', () => { state.lastAnalysis = null; });
 
   function analyzeSourceStream() {
     const sourceUrl = fSourceUrl.value.trim();
@@ -703,29 +746,30 @@
     
     api.post('/api/analyze', { sourceUrl })
       .then(result => {
+        state.lastAnalysis = { ...result, sourceUrl };
         sourceAnalysis.classList.remove('hidden');
         analysisOutput.textContent = JSON.stringify(result, null, 2);
         
         // Check Facebook compatibility
-        const videoCodec = result.video?.codec_name;
-        const audioCodec = result.audio?.codec_name;
-        const isVideoCompatible = videoCodec === 'h264';
-        const isAudioCompatible = audioCodec === 'aac';
-        
-        if (isVideoCompatible && isAudioCompatible) {
+        if (result.compatible) {
           compatibilityInfo.classList.add('hidden');
           toast('Source is compatible with Facebook - Copy mode can be used', 'success');
         } else {
+          fEncodingReencode.checked = true;
           compatibilityInfo.classList.remove('hidden');
           let msg = '<ul>';
-          if (!isVideoCompatible) msg += `<li>Video: ${videoCodec || 'unknown'} → Needs H.264 re-encoding</li>`;
-          if (!isAudioCompatible) msg += `<li>Audio: ${audioCodec || 'unknown'} → Needs AAC re-encoding</li>`;
+          for (const issue of (result.issues || [])) {
+            msg += `<li>${issue}</li>`;
+          }
           msg += '</ul><p>Recommendation: Use Re-encode mode for Facebook compatibility.</p>';
           compatibilityMsg.innerHTML = msg;
           toast('Source needs re-encoding for Facebook compatibility', 'warn');
         }
+        updateCommandPreview();
+        refreshFfmpegGuideSelection();
       })
       .catch(err => {
+        state.lastAnalysis = null;
         toast('Failed to analyze source: ' + err.message, 'error');
       })
       .finally(() => {

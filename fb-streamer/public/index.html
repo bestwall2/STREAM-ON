@@ -174,11 +174,11 @@
           <h4>Encoding Mode</h4>
           <div class="field-row field-row-inline">
             <label class="radio-label">
-              <input type="radio" name="fEncodingMode" value="copy" id="fEncodingCopy" />
+              <input type="radio" name="fEncodingMode" value="copy" id="fEncodingCopy" checked />
               <span>Copy (No Re-encoding) - Passthrough source streams</span>
             </label>
             <label class="radio-label">
-              <input type="radio" name="fEncodingMode" value="reencode" id="fEncodingReencode" checked />
+              <input type="radio" name="fEncodingMode" value="reencode" id="fEncodingReencode" />
               <span>Re-encode - Convert for Facebook compatibility</span>
             </label>
           </div>
@@ -211,8 +211,8 @@
               </select>
             </div>
             <div class="field">
-              <label for="fPreset">Encoder Preset</label>
-              <select id="fPreset">
+              <label for="fEncoderPreset">Encoder Preset <span class="hint">Maps to <code>-preset</code> (speed vs quality)</span></label>
+              <select id="fEncoderPreset">
                 <option value="ultrafast">Ultrafast</option>
                 <option value="superfast">Superfast</option>
                 <option value="veryfast">Veryfast (Recommended)</option>
@@ -225,7 +225,7 @@
               </select>
             </div>
             <div class="field">
-              <label for="fRateControl">Rate Control Mode</label>
+              <label for="fRateControl">Rate Control Mode <span class="hint">Maps to <code>-b:v / -maxrate / -bufsize / -crf</code></span></label>
               <select id="fRateControl">
                 <option value="cbr">CBR (Constant Bitrate) - Best for live streaming</option>
                 <option value="vbr">VBR (Variable Bitrate)</option>
@@ -233,7 +233,7 @@
               </select>
             </div>
             <div class="field">
-              <label for="fVBitrate">Video Bitrate (kbps)</label>
+              <label for="fVBitrate">Video Bitrate (kbps) <span class="hint">Maps to <code>-b:v</code></span></label>
               <input type="number" id="fVBitrate" min="500" max="50000" placeholder="4500" value="4500" />
             </div>
             <div class="field">
@@ -249,7 +249,7 @@
               <input type="number" id="fCrfValue" min="0" max="51" placeholder="23" value="23" />
             </div>
             <div class="field">
-              <label for="fKeyframe">Keyframe Interval (seconds)</label>
+              <label for="fKeyframe">Keyframe Interval (seconds) <span class="hint">Maps to <code>-g / -keyint_min</code></span></label>
               <input type="number" id="fKeyframe" min="1" max="10" placeholder="2" value="2" />
             </div>
             <div class="field">
@@ -286,7 +286,7 @@
               </select>
             </div>
             <div class="field">
-              <label for="fPixelFormat">Pixel Format</label>
+              <label for="fPixelFormat">Pixel Format <span class="hint">Maps to <code>-pix_fmt</code></span></label>
               <select id="fPixelFormat">
                 <option value="yuv420p" selected>yuv420p (Recommended)</option>
                 <option value="yuv422p">yuv422p</option>
@@ -295,7 +295,7 @@
               </select>
             </div>
             <div class="field">
-              <label for="fColorSpace">Color Space</label>
+              <label for="fColorSpace">Color Space <span class="hint">Maps to <code>-colorspace</code> family</span></label>
               <select id="fColorSpace">
                 <option value="bt709" selected>BT.709 (HD)</option>
                 <option value="bt601">BT.601 (SD)</option>
@@ -315,7 +315,7 @@
           <h4>Audio Settings</h4>
           <div class="custom-grid">
             <div class="field">
-              <label for="fAudioCodec">Audio Codec</label>
+              <label for="fAudioCodec">Audio Codec <span class="hint">Maps to <code>-acodec</code></span></label>
               <select id="fAudioCodec">
                 <option value="aac">AAC - Required for Facebook</option>
                 <option value="copy">Copy (Passthrough)</option>
@@ -324,11 +324,11 @@
               </select>
             </div>
             <div class="field">
-              <label for="fABitrate">Audio Bitrate (kbps)</label>
+              <label for="fABitrate">Audio Bitrate (kbps) <span class="hint">Maps to <code>-b:a</code></span></label>
               <input type="number" id="fABitrate" min="32" max="320" placeholder="128" value="128" />
             </div>
             <div class="field">
-              <label for="fSampleRate">Sample Rate (Hz)</label>
+              <label for="fSampleRate">Sample Rate (Hz) <span class="hint">Maps to <code>-ar</code></span></label>
               <select id="fSampleRate">
                 <option value="44100">44100 Hz</option>
                 <option value="48000" selected>48000 Hz (Recommended)</option>
@@ -336,7 +336,7 @@
               </select>
             </div>
             <div class="field">
-              <label for="fAudioChannels">Audio Channels</label>
+              <label for="fAudioChannels">Audio Channels <span class="hint">Maps to <code>-ac</code></span></label>
               <select id="fAudioChannels">
                 <option value="1">Mono (1)</option>
                 <option value="2" selected>Stereo (2)</option>
@@ -398,6 +398,12 @@
           </div>
           <button type="button" class="btn btn-sm btn-secondary" id="btnGenerateCommand">🔄 Regenerate Command from Settings</button>
           <button type="button" class="btn btn-sm btn-secondary" id="btnPreviewCommand">👁 Preview Final Command</button>
+        </div>
+
+        <div class="settings-section">
+          <h4>🧭 FFmpeg Quick Guide</h4>
+          <p class="hint ffmpeg-guide-intro">Every setting below explains what FFmpeg flag it controls and when to use it.</p>
+          <div class="ffmpeg-guide-grid" id="ffmpegGuideGrid"></div>
         </div>
       </details>
 

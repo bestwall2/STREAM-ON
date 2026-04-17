@@ -60,7 +60,7 @@
   const fEncodingCopy = $('fEncodingCopy');
   const fEncodingReencode = $('fEncodingReencode');
   const fVideoCodec = $('fVideoCodec');
-  const fEncoderPreset = $('fPreset');
+  const fEncoderPreset = $('fEncoderPreset');
   const fRateControl = $('fRateControl');
   const fMaxBitrate = $('fMaxBitrate');
   const fBufferSize = $('fBufferSize');
@@ -88,6 +88,26 @@
   const compatibilityMsg = $('compatibilityMsg');
   const sourceAnalysis = $('sourceAnalysis');
   const analysisOutput = $('analysisOutput');
+  const ffmpegGuideGrid = $('ffmpegGuideGrid');
+
+  const ffmpegGuideItems = [
+    { key: 'videoCodec', label: 'Video Codec', flag: '-c:v', text: 'Choose output video codec. Use libx264 for best Facebook compatibility.' },
+    { key: 'encoderPreset', label: 'Encoder Preset', flag: '-preset', text: 'Controls encoding speed vs compression efficiency. veryfast is safest for live.' },
+    { key: 'rateControl', label: 'Rate Control', flag: '-b:v / -maxrate / -bufsize / -crf', text: 'CBR is most stable for livestreaming. CRF favors quality consistency.' },
+    { key: 'keyframe', label: 'Keyframe Interval', flag: '-g / -keyint_min', text: 'Set GOP cadence; 2 seconds is generally recommended by platforms.' },
+    { key: 'pixelFormat', label: 'Pixel Format', flag: '-pix_fmt', text: 'yuv420p is broadly compatible across players and platforms.' },
+    { key: 'colorSpace', label: 'Color Space', flag: '-colorspace', text: 'Select color metadata for correct tone reproduction on viewers devices.' },
+    { key: 'audioCodec', label: 'Audio Codec', flag: '-c:a', text: 'AAC is preferred for Facebook Live and broad decoder compatibility.' },
+    { key: 'audioBitrate', label: 'Audio Bitrate', flag: '-b:a', text: 'Controls audio quality and bandwidth use; 96k–192k is typical.' },
+    { key: 'sampleRate', label: 'Sample Rate', flag: '-ar', text: 'Usually 48 kHz for streaming workflows.' },
+    { key: 'audioChannels', label: 'Audio Channels', flag: '-ac', text: 'Stereo (2) is standard unless source is voice-only mono.' },
+    { key: 'videoFilters', label: 'Video Filters', flag: '-vf', text: 'Apply transforms like scale, fps, crop, pad, denoise, and color adjustments.' },
+    { key: 'audioFilters', label: 'Audio Filters', flag: '-af', text: 'Apply normalization, EQ, compression, and cleanup filters.' },
+    { key: 'threads', label: 'Threads', flag: '-threads', text: 'Manual thread control. Leave auto (0) unless tuning for CPU limits.' },
+    { key: 'tune', label: 'Tune', flag: '-tune', text: 'Select encoder tuning profile. zerolatency helps reduce live delay.' },
+    { key: 'x264Params', label: 'x264 Params', flag: '-x264-params', text: 'Fine-grained advanced x264 options for expert tuning.' },
+    { key: 'customFlags', label: 'Custom Flags', flag: 'global', text: 'Inject extra FFmpeg arguments not covered by the visual controls.' },
+  ];
 
   // ─── Socket.IO ──────────────────────────────────────────────────────────────
 
@@ -471,6 +491,8 @@
 
     toggleCustomSettings();
     updateCommandPreview();
+    renderFfmpegGuide();
+    refreshFfmpegGuideSelection();
     modal.classList.remove('hidden');
     fName.focus();
   }
@@ -658,9 +680,15 @@
    fVBitrate, fMaxBitrate, fBufferSize, fCrfValue, fKeyframe, fProfile, fLevel,
    fPixelFormat, fColorSpace, fVideoFilters, fAudioCodec, fABitrate, fSampleRate,
    fAudioChannels, fAudioFilters, fThreads, fTune, fX264Params, fCustomFlags]
-    .forEach(el => el.addEventListener('change', updateCommandPreview));
+    .forEach(el => el.addEventListener('change', () => {
+      updateCommandPreview();
+      refreshFfmpegGuideSelection();
+    }));
   [fVBitrate, fMaxBitrate, fBufferSize, fCrfValue, fKeyframe, fWidth, fHeight, fFps].forEach(el => {
-    el.addEventListener('input', updateCommandPreview);
+    el.addEventListener('input', () => {
+      updateCommandPreview();
+      refreshFfmpegGuideSelection();
+    });
   });
 
   function analyzeSourceStream() {
@@ -704,6 +732,52 @@
         btnAnalyzeSource.disabled = false;
         btnAnalyzeSource.textContent = '🔍 Analyze Source Stream';
       });
+  }
+
+  function renderFfmpegGuide() {
+    if (!ffmpegGuideGrid) return;
+    ffmpegGuideGrid.innerHTML = '';
+    for (const item of ffmpegGuideItems) {
+      const card = document.createElement('article');
+      card.className = 'ffmpeg-guide-card';
+      card.dataset.key = item.key;
+      card.innerHTML = `
+        <div class="ffmpeg-guide-top">
+          <span class="ffmpeg-guide-name">${item.label}</span>
+          <span class="ffmpeg-guide-flag">${item.flag}</span>
+        </div>
+        <p class="ffmpeg-guide-text">${item.text}</p>
+      `;
+      ffmpegGuideGrid.appendChild(card);
+    }
+  }
+
+  function refreshFfmpegGuideSelection() {
+    if (!ffmpegGuideGrid) return;
+    const activeMap = {
+      videoCodec: fVideoCodec.value,
+      encoderPreset: fEncoderPreset.value,
+      rateControl: fRateControl.value,
+      keyframe: fKeyframe.value,
+      pixelFormat: fPixelFormat.value,
+      colorSpace: fColorSpace.value,
+      audioCodec: fAudioCodec.value,
+      audioBitrate: fABitrate.value,
+      sampleRate: fSampleRate.value,
+      audioChannels: fAudioChannels.value,
+      videoFilters: fVideoFilters.value.trim(),
+      audioFilters: fAudioFilters.value.trim(),
+      threads: fThreads.value,
+      tune: fTune.value,
+      x264Params: fX264Params.value.trim(),
+      customFlags: fCustomFlags.value.trim(),
+    };
+
+    ffmpegGuideGrid.querySelectorAll('.ffmpeg-guide-card').forEach(card => {
+      const key = card.dataset.key;
+      const value = activeMap[key];
+      card.classList.toggle('active', value !== '' && value !== '0' && value !== 'copy');
+    });
   }
   
   function updateCommandPreview() {

@@ -75,6 +75,9 @@ const BACKOFF_MAX     = 60000;  // 60 s maximum retry delay
 const BACKOFF_FACTOR  = 1.6;    // exponential growth factor
 const MAX_LOG_LINES   = 600;    // ring-buffer cap
 const PROBE_TIMEOUT   = 12000;  // ms before ffprobe attempt is abandoned
+const FB_MAX_WIDTH    = 1920;   // Facebook Live recommended max
+const FB_MAX_HEIGHT   = 1080;   // Facebook Live recommended max
+const FB_MAX_FPS      = 60;     // Facebook Live recommended max
 
 // ─── StreamEngine ────────────────────────────────────────────────────────────
 
@@ -141,7 +144,19 @@ class StreamEngine extends EventEmitter {
 
     this._log('info', `Stream starting — source: ${this.config.sourceUrl}`);
     this._setState(STATE.STARTING);
-    this._launchMain();
+    this._checkSourceCompatibility(result => {
+      if (!this._running) return;
+      if (result.compatible) {
+        this._launchMain();
+        return;
+      }
+      this.reconnectCount++;
+      this._log('warn',
+        `Source preflight failed (${result.reason}). ` +
+        `Reconnect #${this.reconnectCount} — starting fallback slate…`
+      );
+      this._launchFallback(true);
+    });
   }
 
   stop() {
@@ -300,7 +315,6 @@ class StreamEngine extends EventEmitter {
       // Socket / read-write timeout (10 s, expressed in microseconds)
       '-timeout',    '10000000',
       '-rw_timeout', '10000000',
-      '-stimeout',   '10000000',   // for RTMP sources
 
       // Give FFmpeg time to probe messed-up IPTV streams
       '-analyzeduration', '10000000',
@@ -510,10 +524,10 @@ class StreamEngine extends EventEmitter {
 
     this._reconnectTimer = setTimeout(() => {
       if (!this._running) return;
-      this._probeSource(alive => {
+      this._checkSourceCompatibility(result => {
         if (!this._running) return;
-        if (alive) {
-          this._log('info', 'Source is reachable — switching back to main stream…');
+        if (result.compatible) {
+          this._log('info', 'Source is reachable and compatible — switching back to main stream…');
           this._backoff = BACKOFF_INIT; // reset
 
           // Tear down the fallback and give the RTMP endpoint ~900 ms
@@ -525,6 +539,7 @@ class StreamEngine extends EventEmitter {
 
           setTimeout(() => { if (this._running) this._launchMain(); }, 900);
         } else {
+          this._log('warn', `Source probe failed compatibility check: ${result.reason}`);
           // Grow backoff & stay on fallback
           this._backoff = Math.min(this._backoff * BACKOFF_FACTOR, BACKOFF_MAX);
           this._setState(STATE.FALLBACK);
@@ -534,15 +549,15 @@ class StreamEngine extends EventEmitter {
     }, delay);
   }
 
-  _probeSource(cb) {
+  _checkSourceCompatibility(cb) {
     const args = [
       '-v',             'error',
       '-timeout',       '8000000',
       '-rw_timeout',    '8000000',
       '-analyzeduration','2000000',
       '-probesize',     '500000',
-      '-show_entries',  'stream=codec_type',
-      '-of',            'csv=p=0',
+      '-show_entries',  'stream=index,codec_type,codec_name,width,height,r_frame_rate,sample_rate,channels',
+      '-of',            'json',
       this.config.sourceUrl,
     ];
 
@@ -558,9 +573,54 @@ class StreamEngine extends EventEmitter {
       cb(result);
     };
 
-    proc.on('exit', code => finish(code === 0 && out.trim().length > 0));
-    proc.on('error', ()  => finish(false));
-    setTimeout(()        => finish(false), PROBE_TIMEOUT);
+    proc.on('exit', code => {
+      if (code !== 0 || out.trim().length === 0) {
+        finish({ compatible: false, reason: 'ffprobe failed to read source' });
+        return;
+      }
+
+      try {
+        const parsed = JSON.parse(out);
+        const streams = Array.isArray(parsed.streams) ? parsed.streams : [];
+        const video = streams.find(s => s.codec_type === 'video');
+        if (!video) {
+          finish({ compatible: false, reason: 'no video stream detected' });
+          return;
+        }
+
+        const width = Number(video.width) || 0;
+        const height = Number(video.height) || 0;
+        const fps = this._parseFps(video.r_frame_rate);
+        if (width > FB_MAX_WIDTH || height > FB_MAX_HEIGHT || fps > FB_MAX_FPS) {
+          this._log('warn',
+            `Source exceeds Facebook guidelines (${width}x${height} @ ${fps}fps). ` +
+            'Output will be normalized by transcoding.'
+          );
+        }
+
+        const audio = streams.find(s => s.codec_type === 'audio');
+        if (!audio) {
+          this._log('warn', 'Source has no audio stream — synthetic silence will be used by encoder.');
+        }
+
+        finish({ compatible: true, reason: 'ok' });
+      } catch (_) {
+        finish({ compatible: false, reason: 'invalid ffprobe metadata' });
+      }
+    });
+    proc.on('error', ()  => finish({ compatible: false, reason: 'ffprobe spawn error' }));
+    setTimeout(()        => finish({ compatible: false, reason: 'ffprobe timed out' }), PROBE_TIMEOUT);
+  }
+
+  _parseFps(value) {
+    if (!value || typeof value !== 'string') return 0;
+    if (!value.includes('/')) {
+      const asNum = Number(value);
+      return Number.isFinite(asNum) ? asNum : 0;
+    }
+    const [n, d] = value.split('/').map(Number);
+    if (!Number.isFinite(n) || !Number.isFinite(d) || d === 0) return 0;
+    return n / d;
   }
 
   // ─── Stats reset ─────────────────────────────────────────────────────────

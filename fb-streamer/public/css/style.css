@@ -603,6 +603,15 @@ label {
 }
 .req   { color: var(--red); }
 .hint  { font-weight: 400; font-size: 11px; color: var(--text-dim); flex: 1; text-align: right; }
+.hint code {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: #a5d6ff;
+  background: rgba(88, 166, 255, 0.12);
+  border: 1px solid rgba(88, 166, 255, 0.22);
+  padding: 1px 6px;
+  border-radius: 999px;
+}
 
 input[type="text"],
 input[type="password"],
@@ -644,6 +653,7 @@ select option { background: var(--surface2); }
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   overflow: hidden;
+  background: linear-gradient(180deg, rgba(255,255,255,0.01), rgba(88,166,255,0.02));
 }
 .custom-settings summary {
   padding: 10px 14px;
@@ -685,6 +695,7 @@ select option { background: var(--surface2); }
   font-weight: 600;
   color: var(--text);
   margin-bottom: 12px;
+  letter-spacing: .2px;
 }
 
 .radio-label {
@@ -757,6 +768,66 @@ select option { background: var(--surface2); }
   font-family: var(--mono);
   font-size: 12px;
   resize: vertical;
+}
+
+.ffmpeg-guide-intro {
+  text-align: left;
+  margin-bottom: 10px;
+}
+
+.ffmpeg-guide-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.ffmpeg-guide-card {
+  background: rgba(31, 41, 55, 0.55);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 11px;
+  transition: border-color .16s, transform .16s, box-shadow .16s;
+}
+
+.ffmpeg-guide-card:hover {
+  border-color: rgba(88, 166, 255, 0.45);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .22);
+}
+
+.ffmpeg-guide-card.active {
+  border-color: rgba(63,185,80,.6);
+  box-shadow: inset 0 0 0 1px rgba(63,185,80,.22);
+}
+
+.ffmpeg-guide-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.ffmpeg-guide-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.ffmpeg-guide-flag {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: #a5d6ff;
+  background: rgba(88,166,255,.12);
+  border: 1px solid rgba(88,166,255,.2);
+  border-radius: 999px;
+  padding: 1px 6px;
+  white-space: nowrap;
+}
+
+.ffmpeg-guide-text {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.45;
 }
 
 .toggle-label {

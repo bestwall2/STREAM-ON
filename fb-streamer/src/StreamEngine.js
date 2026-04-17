@@ -570,7 +570,7 @@ class StreamEngine extends EventEmitter {
       '-rw_timeout',    '8000000',
       '-analyzeduration','2000000',
       '-probesize',     '500000',
-      '-show_entries',  'stream=index,codec_type,codec_name,width,height,r_frame_rate,pix_fmt,sample_rate,channels',
+      '-show_entries',  'stream=index,codec_type,codec_name,width,height,r_frame_rate,sample_rate,channels',
       '-of',            'json',
       this.config.sourceUrl,
     ];
@@ -617,17 +617,6 @@ class StreamEngine extends EventEmitter {
           this._log('warn', 'Source has no audio stream — synthetic silence will be used by encoder.');
         }
 
-        if (this.config.encodingMode === 'copy') {
-          const canCopy = this._isFacebookCopyCompatible(video, audio);
-          if (!canCopy.ok) {
-            this._runtimeForceReencode = true;
-            this._log('warn',
-              `Copy mode is not Facebook-compatible (${canCopy.reason}). ` +
-              'Automatically switching to re-encode mode for stability.'
-            );
-          }
-        }
-
         finish({ compatible: true, reason: 'ok' });
       } catch (_) {
         finish({ compatible: false, reason: 'invalid ffprobe metadata' });
@@ -646,34 +635,6 @@ class StreamEngine extends EventEmitter {
     const [n, d] = value.split('/').map(Number);
     if (!Number.isFinite(n) || !Number.isFinite(d) || d === 0) return 0;
     return n / d;
-  }
-
-  _isFacebookCopyCompatible(video, audio) {
-    const videoCodec = (video.codec_name || '').toLowerCase();
-    const audioCodec = ((audio && audio.codec_name) || '').toLowerCase();
-    const width = Number(video.width) || 0;
-    const height = Number(video.height) || 0;
-    const fps = this._parseFps(video.r_frame_rate);
-    const pixFmt = (video.pix_fmt || '').toLowerCase();
-
-    if (videoCodec !== 'h264') return { ok: false, reason: `video codec is ${videoCodec || 'unknown'} (need h264)` };
-    if (audio && audioCodec !== 'aac') return { ok: false, reason: `audio codec is ${audioCodec} (need aac)` };
-    if (width > FB_MAX_WIDTH || height > FB_MAX_HEIGHT) return { ok: false, reason: `resolution ${width}x${height} exceeds 1080p` };
-    if (fps > FB_MAX_FPS) return { ok: false, reason: `frame rate ${fps.toFixed(2)} exceeds 60fps` };
-    if (pixFmt && pixFmt !== 'yuv420p') return { ok: false, reason: `pixel format is ${pixFmt} (need yuv420p)` };
-    return { ok: true, reason: 'ok' };
-  }
-
-  _noteFacebookOutputFailure(line) {
-    if (!/Error opening output rtmp:\/\/live-api-s\.facebook\.com/i.test(line)) return;
-    this._fbOutputFailures++;
-    if (this._fbOutputFailures < 4) return;
-
-    this._log(
-      'error',
-      'Facebook RTMP output keeps failing. Check stream key validity and ensure the Facebook Live session is ready before starting.'
-    );
-    this.stop();
   }
 
   // ─── Stats reset ─────────────────────────────────────────────────────────
